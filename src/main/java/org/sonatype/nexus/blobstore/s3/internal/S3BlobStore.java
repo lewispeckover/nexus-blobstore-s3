@@ -493,9 +493,7 @@ public class S3BlobStore
   }
 
   private void addBucketLifecycleConfiguration(BucketLifecycleConfiguration lifecycleConfiguration) {
-    s3.setBucketLifecycleConfiguration(
-        getConfiguredBucket(),
-        makeLifecycleConfiguration(lifecycleConfiguration, getConfiguredExpirationInDays()));
+    //s3.setBucketLifecycleConfiguration( getConfiguredBucket(), makeLifecycleConfiguration(lifecycleConfiguration, getConfiguredExpirationInDays()));
   }
 
   private boolean delete(final String path) throws IOException {
