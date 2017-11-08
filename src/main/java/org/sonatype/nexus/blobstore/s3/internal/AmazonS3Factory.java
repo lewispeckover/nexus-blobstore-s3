@@ -14,15 +14,10 @@ package org.sonatype.nexus.blobstore.s3.internal;
 
 import javax.inject.Named;
 
+import com.amazonaws.auth.*;
 import org.sonatype.nexus.blobstore.api.BlobStoreConfiguration;
 
 import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.BasicSessionCredentials;
-import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.google.common.base.Strings;
@@ -44,7 +39,6 @@ public class AmazonS3Factory
 
   public AmazonS3 create(final BlobStoreConfiguration blobStoreConfiguration) {
     AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
-
     String accessKeyId = blobStoreConfiguration.attributes(CONFIG_KEY).get(ACCESS_KEY_ID_KEY, String.class);
     String secretAccessKey = blobStoreConfiguration.attributes(CONFIG_KEY).get(SECRET_ACCESS_KEY_KEY, String.class);
     if (!Strings.isNullOrEmpty(accessKeyId) && !Strings.isNullOrEmpty(secretAccessKey)) {
@@ -80,6 +74,10 @@ public class AmazonS3Factory
       }
     }
 
+    if (builder.getClientConfiguration() == null) {
+      builder.setClientConfiguration(new ClientConfiguration());
+    }
+    builder.getClientConfiguration().setSignerOverride("AWSS3V4SignerType");
     return builder.build();
   }
 }

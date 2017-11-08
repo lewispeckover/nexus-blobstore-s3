@@ -12,12 +12,12 @@
  */
 package org.sonatype.nexus.blobstore.s3.internal;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 import java.util.concurrent.locks.Lock;
@@ -26,6 +26,10 @@ import javax.annotation.Nullable;
 import javax.inject.Inject;
 import javax.inject.Named;
 
+import com.amazonaws.services.s3.model.*;
+import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
+import com.amazonaws.services.s3.transfer.internal.TransferManagerUtils;
+import org.apache.commons.io.input.TeeInputStream;
 import org.sonatype.nexus.blobstore.BlobSupport;
 import org.sonatype.nexus.blobstore.LocationStrategy;
 import org.sonatype.nexus.blobstore.MetricsInputStream;
@@ -39,14 +43,10 @@ import org.sonatype.nexus.blobstore.api.BlobStoreConfiguration;
 import org.sonatype.nexus.blobstore.api.BlobStoreException;
 import org.sonatype.nexus.blobstore.api.BlobStoreMetrics;
 import org.sonatype.nexus.blobstore.api.BlobStoreUsageChecker;
+import org.sonatype.nexus.common.hash.MultiHashingInputStream;
 import org.sonatype.nexus.common.stateguard.Guarded;
 import org.sonatype.nexus.common.stateguard.StateGuardLifecycleSupport;
 
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.BucketLifecycleConfiguration;
-import com.amazonaws.services.s3.model.ObjectTagging;
-import com.amazonaws.services.s3.model.SetObjectTaggingRequest;
-import com.amazonaws.services.s3.model.Tag;
 import com.amazonaws.services.s3.model.lifecycle.LifecycleFilter;
 import com.amazonaws.services.s3.model.lifecycle.LifecycleFilterPredicate;
 import com.amazonaws.services.s3.model.lifecycle.LifecycleTagPredicate;
@@ -56,9 +56,6 @@ import com.google.common.hash.HashCode;
 import org.joda.time.DateTime;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.iterable.S3Objects;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.transfer.TransferManager;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -117,6 +114,7 @@ public class S3BlobStore
   static final Tag DELETED_TAG = new Tag("deleted", "true");
 
   static final String LIFECYCLE_EXPIRATION_RULE_ID = "Expire soft-deleted blobstore objects";
+  private static final int MB500 = 1024 * 1024 * 500;
 
   private final AmazonS3Factory amazonS3Factory;
 
@@ -198,13 +196,14 @@ public class S3BlobStore
   @Guarded(by = STARTED)
   public Blob create(final InputStream blobData, final Map<String, String> headers) {
     checkNotNull(blobData);
-
     return create(headers, destination -> {
         try (InputStream data = blobData) {
+
           MetricsInputStream input = new MetricsInputStream(data);
-          TransferManager transferManager = new TransferManager(s3);
-          transferManager.upload(getConfiguredBucket(), destination, input, new ObjectMetadata())
-              .waitForCompletion();
+          TransferManager transferManager = TransferManagerBuilder.standard().withS3Client(s3).build();
+          PutObjectRequest request = new PutObjectRequest(getConfiguredBucket(), destination, input, new ObjectMetadata());
+          request.getRequestClientOptions().setReadLimit(MB500);
+          transferManager.upload(request).waitForCompletion();
           return input.getMetrics();
         } catch (InterruptedException e) {
           throw new BlobStoreException("error uploading blob", e, null);
@@ -447,10 +446,10 @@ public class S3BlobStore
         addBucketLifecycleConfiguration(null);
       } else {
         // bucket exists, we should test that the correct lifecycle config is present
-        BucketLifecycleConfiguration lifecycleConfiguration = s3.getBucketLifecycleConfiguration(getConfiguredBucket());
-        if (!isExpirationLifecycleConfigurationPresent(lifecycleConfiguration)) {
-          addBucketLifecycleConfiguration(lifecycleConfiguration);
-        }
+        //BucketLifecycleConfiguration lifecycleConfiguration = s3.getBucketLifecycleConfiguration(getConfiguredBucket());
+        //if (!isExpirationLifecycleConfigurationPresent(lifecycleConfiguration)) {
+          //addBucketLifecycleConfiguration(lifecycleConfiguration);
+        //}
       }
 
       setConfiguredBucket(getConfiguredBucket());
