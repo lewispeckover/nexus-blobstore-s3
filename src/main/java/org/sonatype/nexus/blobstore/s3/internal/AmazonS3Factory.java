@@ -77,6 +77,7 @@ public class AmazonS3Factory
     if (builder.getClientConfiguration() == null) {
       builder.setClientConfiguration(new ClientConfiguration());
     }
+    builder.disableChunkedEncoding();
     builder.getClientConfiguration().setSignerOverride("AWSS3V4SignerType");
     return builder.build();
   }
